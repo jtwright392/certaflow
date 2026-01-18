@@ -1,0 +1,223 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  USER
+}
+
+enum CertStatus {
+  ACTIVE
+  EXPIRING
+  EXPIRED
+}
+
+enum ReminderChannel {
+  EMAIL
+  SMS
+}
+
+enum ReminderReason {
+  EXPIRING
+  EXPIRED
+  MISSING_DOCUMENT
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  locations Location[]
+  users     User[]
+  certTypes CertificateType[]
+  kiosks    Kiosk[]
+}
+
+model Location {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  users        User[]
+  kiosks       Kiosk[]
+
+  @@index([organizationId])
+}
+
+model User {
+  id             String  @id @default(cuid())
+  organizationId String
+  locationId     String?
+  email          String  @unique
+  firstName      String?
+  lastName       String?
+  role           Role    @default(USER)
+
+  // For kiosk sign-in (optional). Store a hash in production; keep simple for MVP.
+  pinHash String?
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location     Location?    @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  certAssignments CertAssignment[]
+  userCerts       UserCertificate[]
+  reminderLogs    ReminderLog[]
+  kioskEvents     KioskEvent[]
+
+  @@index([organizationId])
+  @@index([locationId])
+}
+
+model CertificateType {
+  id             String @id @default(cuid())
+  organizationId String
+
+  name               String
+  description        String?
+  // renewalCadenceDays: e.g., 365 for yearly. Optional if expiration is purely date-based per cert.
+  renewalCadenceDays Int?
+
+  // Default reminder offsets; can be overridden later per org
+  remindDaysBefore Int[] @default([30, 14, 7, 1])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  assignments CertAssignment[]
+  userCerts   UserCertificate[]
+  ReminderLog ReminderLog[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+model CertAssignment {
+  id                String @id @default(cuid())
+  organizationId    String
+  userId            String
+  certificateTypeId String
+
+  // Useful if managers assign certs but allow exceptions
+  isRequired Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  certificateType CertificateType @relation(fields: [certificateTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, certificateTypeId])
+  @@index([organizationId])
+  @@index([certificateTypeId])
+}
+
+model UserCertificate {
+  id                String @id @default(cuid())
+  organizationId    String
+  userId            String
+  certificateTypeId String
+
+  issuedAt  DateTime?
+  expiresAt DateTime?
+  status    CertStatus @default(ACTIVE)
+
+  // “Document vault”
+  fileKey       String? // e.g., S3/R2 object key
+  fileName      String?
+  fileMimeType  String?
+  fileSizeBytes Int?
+
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  certificateType CertificateType @relation(fields: [certificateTypeId], references: [id], onDelete: Cascade)
+
+  // Allow multiple uploads/versions over time
+  @@index([organizationId])
+  @@index([userId])
+  @@index([certificateTypeId])
+  @@index([expiresAt])
+}
+
+model ReminderLog {
+  id                String  @id @default(cuid())
+  organizationId    String
+  userId            String
+  certificateTypeId String?
+
+  channel ReminderChannel
+  reason  ReminderReason
+
+  // When you later integrate email/SMS providers
+  providerMessageId String?
+  toAddress         String?
+  sentAt            DateTime @default(now())
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  certificateType CertificateType? @relation(fields: [certificateTypeId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([sentAt])
+}
+
+model Kiosk {
+  id             String  @id @default(cuid())
+  organizationId String
+  locationId     String?
+
+  name           String // "Front Desk iPad"
+  // secret to lock kiosk mode (store hashed in prod)
+  accessCodeHash String?
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location     Location?    @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  events KioskEvent[]
+
+  @@index([organizationId])
+  @@index([locationId])
+}
+
+model KioskEvent {
+  id      String  @id @default(cuid())
+  kioskId String
+  userId  String?
+
+  // e.g. "PIN_LOGIN", "CERT_UPLOAD", "STATUS_VIEW"
+  eventType String
+  metadata  Json?
+
+  createdAt DateTime @default(now())
+
+  kiosk Kiosk @relation(fields: [kioskId], references: [id], onDelete: Cascade)
+  user  User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([kioskId])
+  @@index([userId])
+  @@index([createdAt])
+}
