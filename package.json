@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
     "postinstall": "prisma generate",
@@ -44,5 +44,8 @@
     "tailwindcss": "^4.1.18",
     "tsx": "^4.19.2",
     "typescript": "^5"
-  }
+  },
+  "engines": {
+  "node": "22.x"
+}
 }
