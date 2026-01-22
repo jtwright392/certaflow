@@ -8,6 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "postinstall": "prisma generate",
+    "prisma:generate": "prisma generate",
+    "prisma:studio": "prisma studio",
+    "prisma:migrate": "prisma migrate dev"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
