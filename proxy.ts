@@ -6,7 +6,7 @@ const RESERVED = new Set(["www", "app", "admin", "api", "mail"])
 function getSubdomain(host: string) {
   const h = host.split(":")[0].toLowerCase()
 
-  // local: acme.localhost
+  // local dev: acme.localhost
   if (h.endsWith(".localhost")) return h.replace(".localhost", "")
 
   // prod: acme.certaflow.com
@@ -18,27 +18,23 @@ function getSubdomain(host: string) {
   return null
 }
 
-export const config = {
-  matcher: ["/:path*"],
-}
+export const config = { matcher: ["/:path*"] }
 
 export default function proxy(req: NextRequest) {
   const pathname = req.nextUrl.pathname
 
-  // skip internals
-  if (
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/api") ||
-    pathname === "/favicon.ico"
-  ) {
+  // Skip Next internals + API
+  if (pathname.startsWith("/_next") || pathname.startsWith("/api") || pathname === "/favicon.ico") {
     return NextResponse.next()
   }
 
   const host = req.headers.get("host") || ""
   const sub = getSubdomain(host)
 
+  // No tenant → normal routing
   if (!sub || RESERVED.has(sub)) return NextResponse.next()
 
+  // Tenant → rewrite to internal folder
   const url = req.nextUrl.clone()
   url.pathname = `/_tenants/${sub}${pathname}`
   return NextResponse.rewrite(url)
