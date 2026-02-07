@@ -2,8 +2,14 @@ import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { getTenantContext } from "@/lib/auth"
+
+
+
 
 export default async function DashboardPage() {
+  const { userId, organizationId, role } = await getTenantContext()
+
   const org = await prisma.organization.findFirst()
   if (!org) {
     return (
